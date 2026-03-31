@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="light">
+    <meta name="theme-color" content="#f3efe7">
+    <title>显卡对比系统</title>
+    <link rel="stylesheet" href="./gpu-styles.css">
+</head>
+<body>
+    <main class="page-shell">
+        <div class="app">
+            <section class="cut-panel hero">
+                <div class="hero-grid">
+                    <div>
+                        <div class="eyebrow">GPU Compare</div>
+                        <h1>显卡对比<br>更清楚一点</h1>
+                        <p>对比只保留核心维度图，查阅只看接近替代和上下位。</p>
+                    </div>
+                    <div class="hero-stats" id="heroStats"></div>
+                </div>
+            </section>
+
+            <section class="cut-panel controls">
+                <div class="controls-top">
+                    <div class="feature-switch" id="featureSwitch">
+                        <button class="segment-chip active" type="button" data-feature="compare">功能一：显卡对比</button>
+                        <button class="segment-chip" type="button" data-feature="lookup">功能二：数据查阅</button>
+                    </div>
+                    <div class="segment-switch" id="segmentSwitch">
+                        <button class="segment-chip" type="button" data-segment="Integrated">集显</button>
+                        <button class="segment-chip active" type="button" data-segment="Desktop">桌面卡</button>
+                        <button class="segment-chip" type="button" data-segment="Laptop">笔记本卡(M)</button>
+                        <button class="segment-chip" type="button" data-segment="All">全部一起搜</button>
+                    </div>
+                </div>
+
+                <div class="input-row" id="compareControls">
+                    <div class="input-card">
+                        <label for="gpuAInput">显卡 A</label>
+                        <input id="gpuAInput" class="gpu-input" type="text" list="gpuOptions" autocomplete="off" placeholder="例：4070、rtx4070、780m、3050 mobile">
+                        <div class="input-hint">支持小写、无空格、纯数字，如 4070、3050m、780m。</div>
+                    </div>
+
+                    <div class="input-card accent">
+                        <label for="gpuBInput">显卡 B</label>
+                        <input id="gpuBInput" class="gpu-input" type="text" list="gpuOptions" autocomplete="off" placeholder="例：3080、rx9060xt8gb、4060 m、890m">
+                    </div>
+
+                    <div class="input-actions">
+                        <button id="compareBtn" class="cta-btn" type="button">开始对比</button>
+                    </div>
+                </div>
+
+                <div class="lookup-row hidden" id="lookupControls">
+                    <div class="input-card">
+                        <label for="lookupInput">查询显卡</label>
+                        <input id="lookupInput" class="gpu-input" type="text" list="gpuOptions" autocomplete="off" placeholder="例：5070、780m、3050 mobile">
+                        <div class="input-hint">功能二只看接近替代和上下相邻显卡。</div>
+                    </div>
+                    <div class="input-actions">
+                        <button id="lookupBtn" class="cta-btn" type="button">开始查阅</button>
+                    </div>
+                </div>
+
+                <datalist id="gpuOptions"></datalist>
+            </section>
+
+            <section class="results hidden" id="compareResult">
+                <div class="compare-wrap">
+                    <article class="cut-panel center-card compare-center">
+                        <div class="diamond-chart" id="diamondChart"></div>
+                        <div class="compare-meta" id="compareMeta"></div>
+                        <div class="verdict-block" id="verdictPanel"></div>
+                        <div class="compare-metrics" id="compareMetrics"></div>
+                    </article>
+                </div>
+            </section>
+
+            <section class="results hidden" id="lookupResult">
+                <section class="insight-grid lookup-grid">
+                    <article class="cut-panel" id="lookupSummary"></article>
+                    <article class="cut-panel" id="lookupNear"></article>
+                    <article class="cut-panel" id="lookupLadder"></article>
+                </section>
+            </section>
+        </div>
+    </main>
+
+    <script src="./gpu-data.js"></script>
+    <script src="./gpu-latest.js"></script>
+    <script src="./gpu-app.js"></script>
+</body>
+</html>
