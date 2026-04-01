@@ -739,11 +739,9 @@ function renderMatchItem(base, item) {
     const diff = item.overallDelta;
     const chips = METRICS.map((metric) => {
         const metricDelta = computeMetricDelta(gpu[metric.key], base[metric.key]);
-        if (metricDelta === null) {
-            return `<span class="mini-chip">${escapeHtml(metric.short)} N/A</span>`;
-        }
+        if (metricDelta === null) return "";
         return `<span class="mini-chip">${escapeHtml(metric.short)} ${formatSigned(metricDelta)}%</span>`;
-    }).join("");
+    }).filter(Boolean).join("");
 
     return `
         <div class="match-item">
@@ -755,7 +753,7 @@ function renderMatchItem(base, item) {
                 <div class="diff-badge ${diff >= 0 ? "positive" : "negative"}">${formatSigned(diff)}%</div>
             </div>
             <div class="match-meta">相对 ${escapeHtml(base.name)} 的综合差距。数值越接近 0，越像真正的对位替代。</div>
-            <div class="match-metrics">${chips}</div>
+            ${chips ? `<div class="match-metrics">${chips}</div>` : ""}
         </div>
     `;
 }
