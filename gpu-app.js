@@ -8,12 +8,13 @@ const METRICS = [
 const BASE_DATA = Array.isArray(window.GPU_DATA) ? window.GPU_DATA : [];
 const LATEST_DATA = Array.isArray(window.GPU_LATEST_DATA) ? window.GPU_LATEST_DATA : [];
 const RAW_DATA = mergeGpuSources(BASE_DATA, LATEST_DATA);
+const ENRICHED_RAW_DATA = RAW_DATA.map((gpu) => applyEstimatedMetrics(gpu));
 const MAX_BY_METRIC = METRICS.reduce((acc, metric) => {
-    acc[metric.key] = RAW_DATA.reduce((max, gpu) => Math.max(max, Number(gpu[metric.key]) || 0), 0);
+    acc[metric.key] = ENRICHED_RAW_DATA.reduce((max, gpu) => Math.max(max, Number(gpu[metric.key]) || 0), 0);
     return acc;
 }, {});
 
-const DB = RAW_DATA
+const DB = ENRICHED_RAW_DATA
     .map((gpu) => enrichGpu(gpu))
     .sort((a, b) => a.rank - b.rank);
 
@@ -168,6 +169,15 @@ function isNumber(value) {
 
 function hasUsableMetric(value) {
     return isNumber(value) && Number(value) > 0;
+}
+
+function isEstimatedMetric(gpu, key) {
+    return Array.isArray(gpu?.estimatedMetrics) && gpu.estimatedMetrics.includes(key);
+}
+
+function formatMetricDisplay(gpu, key) {
+    if (!hasUsableMetric(gpu?.[key])) return "N/A";
+    return `${isEstimatedMetric(gpu, key) ? "~" : ""}${Math.round(Number(gpu[key]))}`;
 }
 
 function getSegmentPool(segment = state.segment) {
@@ -372,6 +382,129 @@ function getVariantPenalty(gpu, normalizedQuery) {
     return 35;
 }
 
+function applyEstimatedMetrics(gpu) {
+    const entry = {
+        ...gpu,
+        estimatedMetrics: Array.isArray(gpu.estimatedMetrics) ? [...gpu.estimatedMetrics] : [],
+    };
+
+    if (!hasUsableMetric(entry.ts)) {
+        const estimatedTs = estimateTsValue(entry);
+        if (hasUsableMetric(estimatedTs)) {
+            entry.ts = estimatedTs;
+            entry.estimatedMetrics.push("ts");
+        }
+    }
+
+    ["tse", "pr", "sn"].forEach((key) => {
+        if (hasUsableMetric(entry[key]) || !hasUsableMetric(entry.ts)) return;
+        const estimatedValue = estimateMetricValue(entry, key);
+        if (hasUsableMetric(estimatedValue)) {
+            entry[key] = estimatedValue;
+            entry.estimatedMetrics.push(key);
+        }
+    });
+
+    return entry;
+}
+
+function estimateTsValue(target) {
+    const availableMetrics = ["tse", "pr", "sn"].filter((key) => hasUsableMetric(target[key]));
+    if (!availableMetrics.length) return null;
+
+    const impliedValues = [];
+    availableMetrics.forEach((key) => {
+        const peers = getEstimationPeers(target, key);
+        if (!peers.length) return;
+        peers.forEach((peer) => {
+            const ratio = Number(peer[key]) / Number(peer.ts);
+            if (!Number.isFinite(ratio) || ratio <= 0) return;
+            impliedValues.push({
+                value: Number(target[key]) / ratio,
+                weight: getPeerWeight(target, peer),
+            });
+        });
+    });
+
+    return pickWeightedEstimate(impliedValues);
+}
+
+function estimateMetricValue(target, metricKey) {
+    const peers = getEstimationPeers(target, metricKey);
+    if (!peers.length) return null;
+
+    const impliedValues = peers
+        .map((peer) => {
+            const ratio = Number(peer[metricKey]) / Number(peer.ts);
+            if (!Number.isFinite(ratio) || ratio <= 0) return null;
+            return {
+                value: Number(target.ts) * ratio,
+                weight: getPeerWeight(target, peer),
+            };
+        })
+        .filter(Boolean);
+
+    return pickWeightedEstimate(impliedValues);
+}
+
+function getEstimationPeers(target, metricKey) {
+    const candidates = RAW_DATA.filter(
+        (peer) =>
+            peer.name !== target.name &&
+            hasUsableMetric(peer.ts) &&
+            hasUsableMetric(peer[metricKey])
+    );
+
+    const passes = [
+        (peer) => peer.vendor === target.vendor && peer.segment === target.segment,
+        (peer) => peer.vendor === target.vendor,
+        (peer) => peer.segment === target.segment,
+        () => true,
+    ];
+
+    for (const match of passes) {
+        const peers = candidates
+            .filter((peer) => match(peer))
+            .sort((a, b) => getPeerDistance(target, a) - getPeerDistance(target, b))
+            .slice(0, 8);
+        if (peers.length >= 3) return peers;
+    }
+
+    return [];
+}
+
+function getPeerDistance(target, peer) {
+    const targetTs = hasUsableMetric(target.ts) ? Number(target.ts) : null;
+    const peerTs = Number(peer.ts);
+    const tsDistance = targetTs && peerTs
+        ? Math.abs(Math.log(peerTs / targetTs))
+        : 1.5;
+    const modelDistance = getModelDistance(target.modelCode, peer.modelCode);
+    const vendorPenalty = peer.vendor === target.vendor ? 0 : 0.5;
+    const segmentPenalty = peer.segment === target.segment ? 0 : 0.35;
+    return tsDistance + modelDistance + vendorPenalty + segmentPenalty;
+}
+
+function getPeerWeight(target, peer) {
+    return 1 / (1 + getPeerDistance(target, peer));
+}
+
+function getModelDistance(a, b) {
+    const aNum = Number(a);
+    const bNum = Number(b);
+    if (!Number.isFinite(aNum) || !Number.isFinite(bNum)) return 0.6;
+    return Math.min(1.2, Math.abs(aNum - bNum) / 1000);
+}
+
+function pickWeightedEstimate(items) {
+    if (!items.length) return null;
+    const totalWeight = items.reduce((sum, item) => sum + item.weight, 0);
+    if (!totalWeight) return null;
+    const value = items.reduce((sum, item) => sum + item.value * item.weight, 0) / totalWeight;
+    if (!Number.isFinite(value) || value <= 0) return null;
+    return Math.round(value);
+}
+
 function renderComparison(gpuA, gpuB) {
     state.feature = "compare";
     renderDiamondChart(gpuA, gpuB);
@@ -418,7 +551,7 @@ function renderLookupSummary(gpu) {
                             <div class="match-name">主榜分数</div>
                             <div class="match-meta">Time Spy / 2K 光栅</div>
                         </div>
-                        <div class="diff-badge positive">${gpu.ts ?? "N/A"}</div>
+                        <div class="diff-badge positive">${formatMetricDisplay(gpu, "ts")}</div>
                     </div>
                 </div>
             </div>
@@ -582,7 +715,7 @@ function renderCompareMetricRow(metric, gpuA, gpuB) {
                         <div class="match-name">${escapeHtml(metric.detail)}</div>
                         <div class="match-meta">${escapeHtml(english)}</div>
                     </div>
-                    <div class="diff-badge positive">${valueA ?? "N/A"}</div>
+                    <div class="diff-badge positive">${formatMetricDisplay(gpuA, metric.key)}</div>
                 </div>
             </div>
         `;
@@ -606,8 +739,8 @@ function renderCompareMetricRow(metric, gpuA, gpuB) {
             </div>
             <div class="section-note">${escapeHtml(sentence)}</div>
             <div class="compare-metric-values">
-                <span>A · ${escapeHtml(gpuA.name)} ${valueA ?? "N/A"}</span>
-                <span>B · ${escapeHtml(gpuB.name)} ${valueB ?? "N/A"}</span>
+                <span>A · ${escapeHtml(gpuA.name)} ${formatMetricDisplay(gpuA, metric.key)}</span>
+                <span>B · ${escapeHtml(gpuB.name)} ${formatMetricDisplay(gpuB, metric.key)}</span>
             </div>
         </div>
     `;
@@ -797,7 +930,7 @@ function renderLadderItem(gpu, targetGpu) {
                     <div class="ladder-name">${escapeHtml(gpu.name)}</div>
                     <div class="ladder-meta">${escapeHtml(gpu.vendor)} · ${escapeHtml(formatSegment(gpu.segment))} · 第 ${gpu.rank} 位</div>
                 </div>
-                <div class="diff-badge ${isCurrent ? "positive" : "negative"}">${gpu.ts ?? "N/A"}</div>
+                <div class="diff-badge ${isCurrent ? "positive" : "negative"}">${formatMetricDisplay(gpu, "ts")}</div>
             </div>
             <div class="ladder-bar"><span style="width:${width}%"></span></div>
         </div>

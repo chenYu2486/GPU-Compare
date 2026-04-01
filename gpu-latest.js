@@ -1,4 +1,6 @@
 window.GPU_LATEST_DATA = [
+  { rawName: "RTX5050", name: "RTX 5050", vendor: "NVIDIA", segment: "Desktop", modelCode: "5050", ts: 10773, tse: 5023, pr: 6068, sn: 2319 },
+  { rawName: "RTX5050M", name: "RTX 5050 M", vendor: "NVIDIA", segment: "Laptop", modelCode: "5050", ts: 9098, tse: 4212, pr: 5095, sn: 1743 },
   { rawName: "RTX5090(D)", name: "RTX 5090 (D)", vendor: "NVIDIA", segment: "Desktop", modelCode: "5090", ts: 48052, tse: 25999 },
   { rawName: "RTX5090", name: "RTX 5090", vendor: "NVIDIA", segment: "Desktop", modelCode: "5090", ts: 47510, tse: 25825, pr: null, sn: null },
   { rawName: "RTX4090", name: "RTX 4090", vendor: "NVIDIA", segment: "Desktop", modelCode: "4090", ts: 36328, tse: 19460 },
