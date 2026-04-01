@@ -98,7 +98,7 @@ function enrichGpu(gpu) {
     entry.aliases = buildAliases(entry);
     entry.overall = computeOverall(entry);
     entry.tier = classifyTier(entry.ts);
-    entry.availableMetricCount = METRICS.filter((metric) => isNumber(entry[metric.key])).length;
+    entry.availableMetricCount = METRICS.filter((metric) => hasUsableMetric(entry[metric.key])).length;
     return entry;
 }
 
@@ -133,7 +133,7 @@ function computeOverall(gpu) {
 
     METRICS.forEach((metric) => {
         const value = Number(gpu[metric.key]);
-        if (!Number.isFinite(value)) return;
+        if (!hasUsableMetric(value)) return;
         const maxValue = MAX_BY_METRIC[metric.key] || 1;
         weightedTotal += (value / maxValue) * metric.weight;
         weightSum += metric.weight;
@@ -164,6 +164,10 @@ function normalize(input) {
 
 function isNumber(value) {
     return Number.isFinite(Number(value));
+}
+
+function hasUsableMetric(value) {
+    return isNumber(value) && Number(value) > 0;
 }
 
 function getSegmentPool(segment = state.segment) {
@@ -520,9 +524,9 @@ function renderVerdict(gpuA, gpuB) {
         `;
     }
 
-    const tsA = isNumber(gpuA.ts) ? Number(gpuA.ts) : null;
-    const tsB = isNumber(gpuB.ts) ? Number(gpuB.ts) : null;
-    if (!isNumber(tsA) || !isNumber(tsB) || tsA === 0 || tsB === 0) {
+    const tsA = hasUsableMetric(gpuA.ts) ? Number(gpuA.ts) : null;
+    const tsB = hasUsableMetric(gpuB.ts) ? Number(gpuB.ts) : null;
+    if (!hasUsableMetric(tsA) || !hasUsableMetric(tsB)) {
         return `
             <div class="section-kicker">双卡结论</div>
             <h3>这两张卡缺少可直接比较的 2K 光栅分数。</h3>
@@ -565,12 +569,12 @@ function renderCompareMetrics(gpuA, gpuB) {
 }
 
 function renderCompareMetricRow(metric, gpuA, gpuB) {
-    const valueA = isNumber(gpuA?.[metric.key]) ? Number(gpuA[metric.key]) : null;
-    const valueB = isNumber(gpuB?.[metric.key]) ? Number(gpuB[metric.key]) : null;
+    const valueA = hasUsableMetric(gpuA?.[metric.key]) ? Number(gpuA[metric.key]) : null;
+    const valueB = hasUsableMetric(gpuB?.[metric.key]) ? Number(gpuB[metric.key]) : null;
     const english = metric.label;
 
     if (!gpuB) {
-        if (!isNumber(valueA)) return "";
+        if (!hasUsableMetric(valueA)) return "";
         return `
             <div class="compare-metric-row">
                 <div class="compare-metric-head">
@@ -584,7 +588,7 @@ function renderCompareMetricRow(metric, gpuA, gpuB) {
         `;
     }
 
-    if (!isNumber(valueA) || !isNumber(valueB) || valueA === 0 || valueB === 0) return "";
+    if (!hasUsableMetric(valueA) || !hasUsableMetric(valueB)) return "";
 
     const delta = computeMetricDelta(valueA, valueB);
     const sentence = buildMetricSentence(metric, gpuA, gpuB, valueA, valueB, delta);
@@ -619,13 +623,13 @@ function buildMetricSentence(metric, gpuA, gpuB, valueA, valueB, delta) {
 }
 
 function computeForwardDelta(valueA, valueB) {
-    if (!isNumber(valueA) || !isNumber(valueB) || Number(valueA) === 0 || Number(valueB) === 0) return 0;
+    if (!hasUsableMetric(valueA) || !hasUsableMetric(valueB)) return 0;
     if (Number(valueA) >= Number(valueB)) return ((Number(valueA) - Number(valueB)) / Number(valueB)) * 100;
     return -(((Number(valueB) - Number(valueA)) / Number(valueA)) * 100);
 }
 
 function computeOverallDelta(gpuA, gpuB) {
-    const sharedMetrics = METRICS.filter((metric) => isNumber(gpuA[metric.key]) && isNumber(gpuB[metric.key]));
+    const sharedMetrics = METRICS.filter((metric) => hasUsableMetric(gpuA[metric.key]) && hasUsableMetric(gpuB[metric.key]));
     if (!sharedMetrics.length) return 0;
 
     let scoreA = 0;
@@ -661,7 +665,7 @@ function getStrongestGap(gpuA, gpuB) {
 }
 
 function computeMetricDelta(valueA, valueB) {
-    if (!isNumber(valueA) || !isNumber(valueB) || Number(valueB) === 0) return null;
+    if (!hasUsableMetric(valueA) || !hasUsableMetric(valueB)) return null;
     return ((Number(valueA) - Number(valueB)) / Number(valueB)) * 100;
 }
 
@@ -725,12 +729,12 @@ function findNearestCards(targetGpu, limit) {
 function computeSimilarityDistance(base, candidate) {
     const baseValue = base.ts;
     const candidateValue = candidate.ts;
-    if (!isNumber(baseValue) || !isNumber(candidateValue) || Number(baseValue) === 0) return Infinity;
+    if (!hasUsableMetric(baseValue) || !hasUsableMetric(candidateValue)) return Infinity;
     return Math.abs(((Number(candidateValue) - Number(baseValue)) / Number(baseValue)) * 100);
 }
 
 function computeTsGap(candidate, base) {
-    if (!isNumber(candidate?.ts) || !isNumber(base?.ts) || Number(base.ts) === 0) return 0;
+    if (!hasUsableMetric(candidate?.ts) || !hasUsableMetric(base?.ts)) return 0;
     return ((Number(candidate.ts) - Number(base.ts)) / Number(base.ts)) * 100;
 }
 
